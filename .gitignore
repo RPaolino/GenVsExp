@@ -1,0 +1,6 @@
+wandb/*
+results/*
+**__pycache__**
+slurm*
+scripts/*
+parse_kfold_results.py
