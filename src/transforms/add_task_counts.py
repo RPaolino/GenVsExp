@@ -6,11 +6,11 @@ from torch_geometric.utils.convert import to_networkx
 import numpy as np
 import torch
 
-from .utils import homlib_dragon_graph, homlib_cycle_graph, to_homlib
+from ..utils import homlib_dragon_graph, homlib_cycle_graph, to_homlib
 
-class AddLabel(BaseTransform):
+class AddTaskCounts(BaseTransform):
     r"""
-    Concatenate the features data.x with the number of cycle counts.
+    Create the attribute data.count with the number of counts specified by the task.
     """
     def __init__(self, task: str):
         self.task = task
@@ -27,27 +27,27 @@ class AddLabel(BaseTransform):
                 cycles = nx.cycle_basis(G)
             else:
                 raise NotImplementedError
-            y = 0
+            count = 0
             for C in cycles:
                 if (len(C)>2) and (len(C)<= length_bound):
-                    y += 1
-            y = torch.tensor(y)
+                    count += 1
+            count = torch.tensor(count)
         elif self.task=="node_count":
-            y = torch.tensor(
+            count = torch.tensor(
                 data.num_nodes,
                 dtype=torch.float
             )
         elif self.task=="hom_D":
-            y = hom(
+            count = hom(
                 homlib_dragon_graph(), 
                 to_homlib(data)
             )
         elif self.task.contains("hom_C"):
-            y = hom(
+            count = hom(
                 homlib_cycle_graph(int(self.task.replace("hom_C", ""))), 
                 to_homlib(data)
             )
         else:
             raise NotImplementedError
-        data.y = y
+        data.task_counts = count
         return data

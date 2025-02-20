@@ -1,4 +1,5 @@
 import argparse
+from collections import Counter
 import csv
 import json
 import matplotlib.pyplot as plt
@@ -20,15 +21,19 @@ from src.models import (
 )
 from src.synthetic_dataset import SyntheticDataset
 from src.cosine_scheduler import get_cosine_schedule_with_warmup
-from src.add_subgraph_cycle_counts import AddSubgraphCycleCounts
-from src.add_homomorphism_cycle_counts import AddHomomorphismCycleCounts
-from src.add_cycle_basis_counts import AddCycleBasisCounts
-from src.add_label import AddLabel
-from src.add_subgraph import AddSubgraph
+from src.transforms import (
+    AddSubgraphCycleCounts,
+    AddHomomorphismCycleCounts,
+    AddCycleBasisCounts,
+    AddTaskCounts,
+    AddLabel,
+    AddSubgraph
+)
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-def compute_loss(args, data, target, model, criterion):
-    data, target = data.to(args.device), target.to(args.device)
+def compute_loss(args, data, model, criterion):
+    data, target = data.to(device), data.y.to(device)
     output = model(data)
     if len(output.shape) != len(target.shape):
         output = torch.squeeze(output, dim=1)
@@ -56,30 +61,30 @@ def compute_metric_batch(args, output, target, storage):
         raise Exception("Unknown Task")
     return storage
 
-def train(args, model, loader, criterion, optimizer, scheduler, median):
+def train(args, model, loader, criterion, optimizer, scheduler):
     model.train()
     total_loss = 0
     storage = None
     for data in loader:
         optimizer.zero_grad()
-        loss, output = compute_loss(args, data, (data.y>=median)*1, model, criterion)
+        loss, output = compute_loss(args, data, model, criterion)
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
-        storage = compute_metric_batch(args, output, (data.y>=median)*1, storage)
+        storage = compute_metric_batch(args, output, data.y, storage)
     if scheduler is not None:
         scheduler.step()
     return total_loss / len(loader), storage / len(loader.dataset)
 
-def evaluate(args, model, loader, criterion, median):
+def evaluate(args, model, loader, criterion):
     model.eval()
     total_loss = 0
     storage = None
     with torch.no_grad():
         for data in loader:
-            loss, output = compute_loss(args, data, (data.y>=median)*1, model, criterion)
+            loss, output = compute_loss(args, data, model, criterion)
             total_loss += loss.item()
-            storage = compute_metric_batch(args, output, (data.y>=median)*1, storage)
+            storage = compute_metric_batch(args, output, data.y, storage)
     return total_loss / len(loader), storage / len(loader.dataset)
 
 def get_mlp(num_layers, in_dim, out_dim, hidden_dim, activation, dropout_rate):
@@ -183,6 +188,7 @@ def main(config = None):
             "- hom_CN: add homomorphism counts of cycle whose length is at most N;"
             "- basis_CN: add counts of cycle whose length is at most N in the cycle_basis."
             "- sub_CN: add subgraph counts of cycle whose length is at most N."
+            "Note that sub_C2 does not add any positional encoding."
         )
     )
     parser.add_argument(
@@ -195,7 +201,8 @@ def main(config = None):
             "-sum_basis_CN: the label will be the number of cycles of length at most N in the cycle_basis;"
             "-hom_D: the label will be the number of homomorphism from the dragon graph;"
             "-hom_CN: the label will be the number of homomorphism from the cycle of length N;"
-            "-num_nodes: the label will be the number of nodes."
+            "-num_nodes: the label will be the number of nodes;"
+            "-tmd: labels are correlated to the Tree Mover's Distance."
         )
     )
     parser.add_argument(
@@ -222,6 +229,19 @@ def main(config = None):
     else:
         print(transform_dict_to_args_list(config))
         args = parser.parse_known_args(transform_dict_to_args_list(config))[0]
+    if "tmd" in args.task:
+        print("Overwriting hyperparams for TMD task")
+        if args.dataset != "er":
+            print(f"Dataset from {args.dataset} to ER")
+            args.dataset = "er"
+        args.num_nodes_lower = 15
+        args.num_nodes_upper = 35
+        if args.num_graphs > 500:
+            print(f"Num. graphs from {args.num_graphs} to 500")
+            args.num_graphs = 500
+    else:
+        args.num_nodes_lower = 35
+        args.num_nodes_upper = 55
     # Seeding
     seed_all(args.seed)
     # Creating folder for the results
@@ -253,14 +273,12 @@ def main(config = None):
         )
     else:
         raise NotImplementedError("Positional encoding not implemented!")
-    transforms.append(
-        AddLabel(
-            task=args.task
+    if ("tmd" not in args.task):
+        transforms.append(
+            AddTaskCounts(
+                task=args.task
+            )
         )
-    )
-    transforms.append(
-        AddSubgraph()
-    )
     transforms = Compose(
        transforms
     )
@@ -268,16 +286,19 @@ def main(config = None):
     dataset = SyntheticDataset(
         num_graphs=args.num_graphs,
         name=args.dataset,
-        transform=transforms
-    )   
-    print("Node features shape:", dataset._data.x.shape)
-    counts = [d.y for d in dataset]  
-    median = np.median(counts)
-    labels = [c>=median for c in counts]
+        pe=args.pe,
+        transform=transforms,
+        num_nodes_lower=args.num_nodes_lower,
+        num_nodes_upper=args.num_nodes_upper,
+        task=args.task,
+        depth=args.num_layers+1
+    )
+    print("X shape", dataset._data.x.shape)
+    print("Y", Counter(dataset._data.y.cpu().tolist()))
     skf_dataset, test_dataset, _, _ = train_test_split(
         dataset, 
-        labels, 
-        stratify=labels,
+        dataset._data.y, 
+        stratify=dataset._data.y,
         test_size=0.1, 
         random_state=42
     ) 
@@ -288,7 +309,7 @@ def main(config = None):
     )
     # Dataset split
     skf = StratifiedKFold(n_splits=10)
-    for fold, (train_idx, val_idx) in enumerate(skf.split(skf_dataset, [d.y>=median for d in skf_dataset])):
+    for fold, (train_idx, val_idx) in enumerate(skf.split(skf_dataset, [d.y for d in skf_dataset])):
         train_loader = DataLoader(
             [skf_dataset[idx] for idx in train_idx], 
             batch_size=args.bs, 
@@ -315,7 +336,7 @@ def main(config = None):
             edge_attr_encoder=edge_attr_encoder,
             output_channels=1,
             pool=args.pool
-        ).to(args.device)
+        ).to(device)
 
         if ("sum_sub_C" in args.task 
             or "sum_basis_C" in args.task 
@@ -346,7 +367,7 @@ def main(config = None):
             raise Exception("Unknown task")
         if args.dataset == "tmd":
             assert args.task == "tmd"
-        classifier = classifier.to(args.device)
+        classifier = classifier.to(device)
         model = GNNnClassifier(message_passing, classifier)
 
         optimizer = getattr(torch.optim, args.optim)(
@@ -370,7 +391,7 @@ def main(config = None):
         else:
             raise Exception("Unknown task type")
         # Starting the learning
-        wandb.init(project = "tmd")
+        wandb.init(project = "GenVsExp")
         progress = tqdm.trange(args.epochs)
         for epoch in progress:
             train_loss, train_metric = train(
@@ -379,8 +400,7 @@ def main(config = None):
                 train_loader, 
                 criterion, 
                 optimizer, 
-                scheduler,
-                median
+                scheduler
             )
             losses[0].append(train_loss)
             metrics[0].append(train_metric)
@@ -388,8 +408,7 @@ def main(config = None):
                 args, 
                 model, 
                 val_loader, 
-                criterion,
-                median
+                criterion
             )
             losses[1].append(val_loss)
             metrics[1].append(val_metric)  
@@ -397,8 +416,7 @@ def main(config = None):
                 args, 
                 model, 
                 test_loader, 
-                criterion,
-                median
+                criterion
             )
             losses[2].append(test_loss)
             metrics[2].append(test_metric)  

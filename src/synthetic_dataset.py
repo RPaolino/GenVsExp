@@ -1,11 +1,18 @@
 import networkx as nx
+import matplotlib.pyplot as plt
 import numpy as np
+import os
+from sklearn.manifold import MDS
+import sklearn.cluster
 import torch
 from torch_geometric.utils import to_dense_adj
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.transforms import BaseTransform, Compose
 import tqdm
 from typing import Union, Iterable
+
+from .transforms import AddLabel, AddSubgraph
+from .tmd import pairwise_TMD
 
 def create_synthetic_data(
     name: str,
@@ -132,6 +139,36 @@ def create_synthetic_data(
     )
     return Data(num_nodes=num_nodes, edge_index=edge_index)
 
+def median_labels(
+    dataset: list[Data]
+) -> list[int]:
+    counts = [d.task_counts for d in dataset]
+    labels = [int(c>=np.median(counts)) for c in counts]
+    return labels
+
+
+def TMD_labels(
+    TMD_pairwise
+) -> list[int]:
+    """
+    Generates labels for the dataset based on Tree Mover’s Distance (TMD) and
+    clusters them into two classes.
+
+    Args:
+        TMD_pairwise:
+            pairwise TMD distances
+    """
+   
+    # MDS Embedding
+    print("Performing MDS embedding.")
+    mds = MDS(n_components=2, dissimilarity='precomputed', random_state=42)
+    embeddings = mds.fit_transform(TMD_pairwise)
+    # Clustering
+    print("Clustering")
+    clustering = sklearn.cluster.KMeans(n_clusters=2, random_state=42)
+    labels = clustering.fit_predict(embeddings)
+    return embeddings, labels
+
 class SyntheticDataset(InMemoryDataset):
     r"""
     Creates a torch_geometric.data.InMemoryDataset object of random graphs.
@@ -150,6 +187,8 @@ class SyntheticDataset(InMemoryDataset):
         num_graphs: int,
         transform: Union[BaseTransform, Compose],
         name: str,
+        task: str,
+        pe: str,
         num_nodes_lower: int = 35,
         num_nodes_upper: int = 55,
         p: float = 0.1,
@@ -160,11 +199,13 @@ class SyntheticDataset(InMemoryDataset):
         p_same_block_lower: float = 1e-1,
         p_same_block_upper: float = 3e-1,
         p_different_block_lower: float = 1e-3,
-        p_different_block_upper: float = 2e-2
+        p_different_block_upper: float = 2e-2,
+        depth: int = 3
     ):
         
         super().__init__()
         self._data_list = []
+        data_list = []
         for seed in tqdm.trange(num_graphs, desc="Synthetic Dataset Creation"):
             data = create_synthetic_data(
                 name=name,
@@ -181,8 +222,107 @@ class SyntheticDataset(InMemoryDataset):
                 p_different_block_upper=p_different_block_upper,
                 seed=seed
             )
-            data = transform(data)
-            self._data_list.append(data)
+            data_list.append(transform(data))
+        
+        if "tmd" not in task:
+            filename = f"data/TMD_{100}_{pe}_{task}.pt"
+            labels = median_labels(data_list)
+            if os.path.exists(filename):
+                print("Loading TMD")
+                pairwise_distances = torch.load(filename)
+            else:
+                pairwise_distances = pairwise_TMD(
+                    data_list[:100],
+                    depth=depth
+                )
+                torch.save(
+                    pairwise_distances,
+                    filename
+                )
+            mds = MDS(n_components=2, dissimilarity='precomputed', random_state=42)
+            embeddings = mds.fit_transform(pairwise_distances)
+            
+            np.savetxt(
+                filename.replace("TMD_", "embeddings_").replace(".pt", ".txt"),
+                np.concatenate(
+                    [embeddings, np.array(labels[:100]).reshape(-1, 1)],
+                    axis=1
+                )
+            )
+            cluster_0 = [idx for idx, l in enumerate(labels[:100]) if l==0]
+            cluster_1 = [idx for idx, l in enumerate(labels[:100]) if l==1]
+            fig, ax = plt.subplots()
+            ax.scatter(
+                embeddings[cluster_0, 0], 
+                embeddings[cluster_0, 1], 
+                c=["red" for _ in range(len(cluster_0))], 
+                s=10, 
+                alpha=.5,
+                label=0
+            )
+            ax.scatter(
+                embeddings[cluster_1, 0], 
+                embeddings[cluster_1, 1], 
+                c=["blue" for _ in range(len(cluster_1))], 
+                s=10, 
+                alpha=.5,
+                marker="D",
+                label=1
+            )
+            ax.legend(title="Label")
+            ax.set_xticks([])
+            ax.set_yticks([])
+            fig.savefig(
+                filename.replace(".pt", ".svg").replace("data/", "imgs/"), 
+                bbox_inches="tight"
+            )
+            plt.close(fig)
+        else:
+            filename = f"data/TMD_{num_graphs}_{pe}_{task}.pt"
+            if os.path.exists(filename):
+                print("Loading TMD")
+                pairwise_distances = torch.load(filename)
+            else:
+                pairwise_distances = pairwise_TMD(
+                    data_list,
+                    depth=depth
+                )
+                torch.save(
+                    pairwise_distances,
+                    filename
+                )
+            embeddings, labels = TMD_labels(
+                pairwise_distances
+            )
+            cluster_0 = [idx for idx, l in enumerate(labels) if l==0]
+            cluster_1 = [idx for idx, l in enumerate(labels) if l==1]
+            fig, ax = plt.subplots()
+            ax.scatter(
+                embeddings[cluster_0, 0], 
+                embeddings[cluster_0, 1], 
+                c=["red" for _ in range(len(cluster_0))], 
+                s=10, 
+                alpha=.5
+            )
+            ax.scatter(
+                embeddings[cluster_1, 0], 
+                embeddings[cluster_1, 1], 
+                c=["blue" for _ in range(len(cluster_1))], 
+                s=10, 
+                alpha=.5,
+                marker="D"
+            )
+            fig.savefig(filename, bbox_inches="tight")
+            plt.close(fig)
+                
+        new_transforms = Compose([
+            AddLabel(labels=labels),
+            AddSubgraph()
+        ])
+        for data in tqdm.tqdm(data_list, desc="Adding Synthetic Labels"):
+            self._data_list.append(
+                new_transforms(data)
+            )
         # Collating all elements of the dataset
         self._data, _ = self.collate(
             self._data_list

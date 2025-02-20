@@ -5,7 +5,7 @@ import torch.nn
 from typing import Optional, List
 import torch.nn.functional as F
 from torch_scatter import scatter
-
+from torch_geometric.nn import GINConv, global_add_pool
 
 class MLP(torch.nn.Sequential):
 
