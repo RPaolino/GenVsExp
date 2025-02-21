@@ -245,7 +245,7 @@ if __name__=="__main__":
     tmd_len = np.zeros(
         (len(distance_values), 10)
     )
-    for fold, (train_idx, val_idx) in enumerate(skf.split(skf_dataset, [d.y for d in skf_dataset])):
+    for fold, (train_idx, val_idx) in enumerate(skf.split(range(len(skf_dataset)), [d.y.item() for d in skf_dataset])):
         train_loader = DataLoader(
             [skf_dataset[idx] for idx in train_idx], 
             batch_size=args.bs, 
@@ -356,6 +356,7 @@ if __name__=="__main__":
         )
         ax.set_xlabel("TMD from training dataset")
         ax.set_ylabel("Accuracy")
+        ax.set_xscale("symlog")
         fig.savefig(
             os.path.join(
                 results_dir,

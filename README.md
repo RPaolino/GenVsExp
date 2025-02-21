@@ -44,5 +44,6 @@ python real.py --dataset Mutagenicity --num_layers 3
 ```
 <center>
 <img src="imgs/MUTAG.svg" style="width: 300">
+<img src="imgs/PROTEINS.svg" style="width: 300">
 </center>
 As reported, performance deteriorates as the testing samples get further form the training dataset.

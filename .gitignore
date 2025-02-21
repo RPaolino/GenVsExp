@@ -1,13 +1,18 @@
 wandb/*
 
 results/*
+
 !results/Mutagenicity
 results/Mutagenicity/*
-!results/Mutagenicity/tmd_train_test_sub_C2.pt
+!results/Mutagenicity/tmd_train_test*
+
+!results/MUTAG
+results/MUTAG/*
+!results/MUTAG/tmd_train_test*
 
 !results/PROTEINS
 results/PROTEINS/*
-!results/PROTEINS/tmd_train_test_sub_C2.pt
+!results/PROTEINS/tmd_train_test*
 
 **__pycache__**
 
@@ -18,3 +23,5 @@ scripts/*
 parse_kfold_results.py
 
 data/*
+
+*.sqsh

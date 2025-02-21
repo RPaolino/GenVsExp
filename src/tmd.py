@@ -192,7 +192,7 @@ def pairwise_TMD(
     in the train_dataset.
     """
     num_train_graphs = len(train_dataset)
-    parallel = Parallel(n_jobs=14, backend="multiprocessing", verbose=1)
+    parallel = Parallel(n_jobs=-1, backend="multiprocessing", verbose=1)
     dTMD = delayed(
         partial(TMD, L=depth, w=w)
     )
