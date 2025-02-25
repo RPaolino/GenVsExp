@@ -7,6 +7,41 @@ import torch.nn.functional as F
 from torch_scatter import scatter
 from torch_geometric.nn import GINConv, global_add_pool
 
+class GINModel(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, num_layers):
+        super().__init__()
+        self.convs = torch.nn.ModuleList()
+        current_channels = in_channels
+        for _ in range(num_layers):
+            mlp = torch.nn.Sequential(
+                torch.nn.Linear(current_channels, hidden_channels),
+                torch.nn.ReLU(),
+                torch.nn.Linear(hidden_channels, hidden_channels),
+            )
+            self.convs.append(
+                GINConv(mlp)
+            )
+            current_channels = hidden_channels
+
+    def forward(self, x, edge_index, batch):
+        for conv in self.convs:
+            x = conv(x, edge_index)
+        x = global_add_pool(x, batch)
+        return x
+
+
+class LinearClassifier(torch.nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.linear = torch.nn.Sequential(
+            torch.nn.Linear(in_channels, in_channels),
+            torch.nn.ReLU(),
+            torch.nn.Linear(in_channels, out_channels)
+        )
+
+    def forward(self, x):
+        return self.linear(x)
+
 class MLP(torch.nn.Sequential):
 
     def __init__(self, input_channels: int, output_channels: int, hidden_channels: int=None, norm: bool=True):

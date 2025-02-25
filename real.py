@@ -15,7 +15,7 @@ from torch_geometric.transforms import Compose, Constant
 import tqdm
 
 from src.cosine_scheduler import get_cosine_schedule_with_warmup
-from src.models import MLP
+from src.models import MLP, LinearClassifier, GINModel
 from src.tmd import pairwise_TMD
 from src.transforms import (
     AddSubgraphCycleCounts,
@@ -35,9 +35,8 @@ def train(model, classifier, loader, criterion, optimizer, scheduler):
     for data in loader:
         data = data.to(device)
         optimizer.zero_grad()
-        embedding = model(data.x, data.edge_index)
-        output = global_add_pool(embedding, data.batch)
-        output = classifier(output)
+        embedding = model(data.x, data.edge_index, data.batch)
+        output = classifier(embedding)
         loss = criterion(output, data.y)
         loss.backward()
         optimizer.step()
@@ -62,9 +61,8 @@ def evaluate(model, classifier, loader, criterion):
     with torch.no_grad():
         for data in loader:
             data = data.to(device=device)
-            embedding = model(data.x, data.edge_index)
-            output = global_add_pool(embedding, data.batch)
-            output = classifier(output)
+            embedding = model(data.x, data.edge_index, data.batch)
+            output = classifier(embedding)
             loss = criterion(output, data.y)
 
             total_loss += loss.item() * data.num_graphs
@@ -177,7 +175,9 @@ if __name__=="__main__":
     with open(f"{results_dir}/args.json", "w") as file:
         json.dump(vars(args), file, indent=4)
     
-    transforms =[Constant(cat=False)]
+    transforms =[
+        Constant()
+    ]
     if "hom_C" in args.pe:
         transforms.append(
             AddHomomorphismCycleCounts(
@@ -245,7 +245,7 @@ if __name__=="__main__":
     tmd_len = np.zeros(
         (len(distance_values), 10)
     )
-    for fold, (train_idx, val_idx) in enumerate(skf.split(range(len(skf_dataset)), [d.y.item() for d in skf_dataset])):
+    for fold, (train_idx, val_idx) in enumerate(skf.split(skf_dataset, [d.y for d in skf_dataset])):
         train_loader = DataLoader(
             [skf_dataset[idx] for idx in train_idx], 
             batch_size=args.bs, 
@@ -256,17 +256,15 @@ if __name__=="__main__":
             batch_size=args.bs, 
             shuffle=False
         ) 
-        model = GIN(
+        model = GINModel(
             in_channels=dataset.num_features,
             hidden_channels=args.hidden_channels,
             num_layers=args.num_layers
         ).to(device)   
-        classifier = MLP(
-            input_channels=args.hidden_channels,
-            output_channels=dataset.num_classes,
-            norm=False
+        classifier = LinearClassifier(
+            in_channels=args.hidden_channels,
+            out_channels=dataset.num_classes
         ).to(device)
-        print(dataset.num_classes)
         optimizer = getattr(torch.optim, args.optim)(
             list(model.parameters()) + list(classifier.parameters()), 
             lr=args.lr
@@ -346,7 +344,8 @@ if __name__=="__main__":
         std = tmd_metrics[:, :fold+1].std(1)
         ax.plot(
             distance_values,
-            mean
+            mean,
+            marker="o"
         )
         ax.fill_between(
             distance_values,

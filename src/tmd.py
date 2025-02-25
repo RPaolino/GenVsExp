@@ -7,7 +7,7 @@ import torch
 import torch_geometric
 from torch_geometric.utils import to_dense_adj
 import tqdm
-from tqdm.contrib.itertools import product
+from itertools import product
 from typing import Optional
 
 # Author: Ching-Yao Chuang <cychuang@mit.edu>
@@ -200,7 +200,7 @@ def pairwise_TMD(
         row, col = np.triu_indices(num_train_graphs, 1)
         progress = tqdm.tqdm(
             zip(row, col),
-            desc=f"Computing TMD",
+            desc=f"Computing TMD with depth {depth}",
             total=len(row)
         )
         flatten_distances =  parallel(
@@ -214,18 +214,26 @@ def pairwise_TMD(
         distances = distances + distances.T
     else:
         num_test_graphs = len(test_dataset)
-        progress = product(
-            range(num_train_graphs), 
-            range(num_test_graphs),
-            desc=f"Computing TMD"
+        distances = torch.zeros(
+            (num_train_graphs, num_test_graphs)
         )
-        distances = parallel(
+        idx = list(
+            product(
+            range(num_train_graphs), 
+            range(num_test_graphs)
+            )
+        )
+        progress = tqdm.tqdm(
+            idx,
+            desc=f"Computing TMD with depth {depth}",
+            total=len(idx)
+        )
+        flatten_distances = parallel(
             dTMD(
                 train_dataset[i], 
                 test_dataset[j]
             ) for (i, j) in progress
         )
-        distances = torch.tensor(
-            distances
-        ).reshape(num_train_graphs, num_test_graphs)
+        idx = np.transpose(idx)
+        distances[idx[0], idx[1]] = torch.tensor(flatten_distances)
     return distances
