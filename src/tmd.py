@@ -70,7 +70,7 @@ def TMD(g1, g2, w, L):
 
     # get attributes
     n1, n2 = len(g1.x), len(g2.x)
-    feat1, feat2 = g1.x, g2.x
+    feat1, feat2 = g1.x.to(torch.float), g2.x.to(torch.float)
     adj1 = get_neighbors(g1)
     adj2 = get_neighbors(g2)
 

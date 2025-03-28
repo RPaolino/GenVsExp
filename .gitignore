@@ -2,17 +2,26 @@ wandb/*
 
 results/*
 
+!results/AIDS
+results/AIDS/*
+!results/AIDS/tmd_train_test*
+!results/AIDS/metrics*.np
+
+!results/BZR
+results/BZR/*
+!results/BZR/tmd_train_test*
+!results/BZR/metrics*.np
+
 !results/Mutagenicity
 results/Mutagenicity/*
 !results/Mutagenicity/tmd_train_test*
+!results/Mutagenicity/metrics*.np
 
-!results/MUTAG
-results/MUTAG/*
-!results/MUTAG/tmd_train_test*
+!results/NCI109
+results/NCI109/*
+!results/NCI109/tmd_train_test*
+!results/NCI109/metrics*.np
 
-!results/PROTEINS
-results/PROTEINS/*
-!results/PROTEINS/tmd_train_test*
 
 **__pycache__**
 

@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import json
 import numpy as np
 import os
+from ogb.graphproppred import PygGraphPropPredDataset
 from sklearn.model_selection import StratifiedKFold, train_test_split
 import torch
 import torch_geometric
@@ -206,10 +207,10 @@ if __name__=="__main__":
         name=args.dataset,
         transform=transforms
     )
-    skf_dataset, test_dataset, _, _ = train_test_split(
+    train_dataset, test_dataset, _, _ = train_test_split(
         dataset, 
-        dataset._data.y, 
-        stratify=dataset._data.y,
+        [d.y.item() for d in dataset], 
+        stratify=[d.y.item() for d in dataset],
         test_size=0.1, 
         random_state=42
     ) 
@@ -218,17 +219,23 @@ if __name__=="__main__":
         batch_size=args.bs, 
         shuffle=False
     )
-    filename = os.path.join(
-        results_dir,
-        f"tmd_train_test_{args.num_layers+1}.pt"
-    )
+    if "_C2" in args.pe:
+        filename = os.path.join(
+            results_dir,
+            f"tmd_train_test_{args.num_layers+1}.pt"
+        )
+    else:
+        filename = os.path.join(
+            results_dir,
+            f"tmd_train_test_{args.num_layers+1}_{args.pe}.pt"
+        )
     if os.path.exists(filename):
         tmd_train_test = torch.load(
             filename
         )
     else:
         tmd_train_test = pairwise_TMD(
-            skf_dataset,
+            train_dataset,
             test_dataset,
             depth=args.num_layers+1
         )
@@ -236,7 +243,10 @@ if __name__=="__main__":
             tmd_train_test,
             filename
         )
-    distance_values = np.unique(tmd_train_test.min(0).values)
+    distance_values = np.quantile(
+        tmd_train_test.min(0).values,
+        [.15, .3, .45, .6, .75, .9, 1]
+    )
     # Dataset split
     skf = StratifiedKFold(n_splits=10)
     tmd_metrics = np.zeros(
@@ -245,14 +255,15 @@ if __name__=="__main__":
     tmd_len = np.zeros(
         (len(distance_values), 10)
     )
-    for fold, (train_idx, val_idx) in enumerate(skf.split(skf_dataset, [d.y for d in skf_dataset])):
+    splits = skf.split(train_dataset, [d.y for d in train_dataset])
+    for fold, (train_idx, val_idx) in enumerate(splits):
         train_loader = DataLoader(
-            [skf_dataset[idx] for idx in train_idx], 
+            [train_dataset[idx] for idx in train_idx], 
             batch_size=args.bs, 
             shuffle=True
         )
         val_loader = DataLoader(
-            [skf_dataset[idx] for idx in val_idx], 
+            [train_dataset[idx] for idx in val_idx], 
             batch_size=args.bs, 
             shuffle=False
         ) 
@@ -356,18 +367,22 @@ if __name__=="__main__":
         ax.set_xlabel("TMD from training dataset")
         ax.set_ylabel("Accuracy")
         ax.set_xscale("symlog")
-        fig.savefig(
-            os.path.join(
+        if "_C2" in args.pe:
+            figname = os.path.join(
                 results_dir,
                 f"metrics_{args.num_layers+1}.pdf"
-            ),
+            )
+        else:
+            figname = os.path.join(
+                results_dir,
+                f"metrics_{args.num_layers+1}_{args.pe}.pdf"
+            )
+        fig.savefig(
+            figname,
             bbox_inches="tight"
         )
         plt.close(fig)
-        filename = os.path.join(
-            results_dir,
-            f"metrics_{args.num_layers+1}.np"
-        )
+        filename = figname.replace(".pdf", ".np")
         np.savetxt(
             filename,
             np.concatenate(
