@@ -76,7 +76,7 @@ def spectral_norms(module_list):
             if p.ndim == 1:
                 # Skip biases
                 continue
-            _, S, _ = torch.linalg.svd(p)
+            S = torch.linalg.svdvals(p)
             spectral_norm += S.max().item()
         norms_2.append(spectral_norm)
     return norms_2
@@ -399,6 +399,9 @@ if __name__=="__main__":
     tmd_metrics = np.zeros(
         (len(distance_values), 10)
     )
+    generalization_tmd_metrics = np.zeros(
+        (len(distance_values), 10)
+    )
     tmd_len = np.zeros(
         (len(distance_values), 10)
     )
@@ -575,8 +578,8 @@ if __name__=="__main__":
                 criterion
             )
             tmd_metrics[n, fold] = tmd_metric
+            generalization_tmd_metrics[n, fold] = metrics[0][best_epoch] - tmd_metric
             tmd_len[n, fold] = len(tmd_dataset)
-
             # # average TMD in this subset (for that fold)
             # print(test_min_d.shape)
             # sub_indices = np.where(test_min_d <= upper)[0]
@@ -592,7 +595,8 @@ if __name__=="__main__":
             # Specialized error bound for that subset by plugging in xi_zeta = threshold_q
             err_bound_sub = bound_on_test_error(upper)
             subset_err_bound[n, fold] = err_bound_sub
-
+        print(tmd_len)
+        print(generalization_tmd_metrics)
         fig, ax = plt.subplots()
         mean = tmd_metrics[:, :fold+1].mean(1)
         std = tmd_metrics[:, :fold+1].std(1)
@@ -657,8 +661,8 @@ if __name__=="__main__":
     print(f"   PAC-Bayes bound: {np.mean(fold_pac_bounds):.4f} +/- {np.std(fold_pac_bounds):.4f}")
 
     # 2) Quantile-based slicing
-    mean_subset_acc      = tmd_metrics.mean(axis=1)
-    std_subset_acc       = tmd_metrics.std(axis=1)
+    mean_subset_acc      = generalization_tmd_metrics.mean(axis=1)
+    std_subset_acc       = generalization_tmd_metrics.std(axis=1)
     mean_subset_err      = subset_err_bound.mean(axis=1)
     std_subset_err       = subset_err_bound.std(axis=1)
     avg_subset_size      = tmd_len.mean(axis=1)
@@ -673,3 +677,55 @@ if __name__=="__main__":
               f"   {std_subset_max_tmd[i]:9.4f}   {mean_subset_acc[i]:9.4f}   {std_subset_acc[i]:9.4f}"
               f"   {mean_subset_err[i]:9.4f}   {std_subset_err[i]:9.4f}"
               f"   {mean_train_acc:9.4f}   {std_train_acc:9.4f}")
+    fig, ax = plt.subplots()
+    axtwinx = ax.twinx()
+    ax.plot(
+        distance_values,
+        mean_subset_acc,
+        marker="o",
+        color="tab:blue",
+        label="Empirical Generalization Error"
+    )
+    ax.fill_between(
+        distance_values,
+        mean_subset_acc - std_subset_acc,
+        mean_subset_acc + std_subset_acc,
+        color="tab:blue",
+        alpha=.5
+    )
+    ax.tick_params(axis='y', labelcolor="tab:blue")
+    ax.set_ylabel('Empirical generalization error', color="tab:blue")
+    axtwinx.plot(
+        distance_values,
+        mean_subset_err,
+        marker="o",
+        color="tab:orange",
+        label="Error Bound"
+    )
+    axtwinx.fill_between(
+        distance_values,
+        (mean_subset_err - std_subset_err),
+        (mean_subset_err + std_subset_err),
+        color="tab:orange",
+        alpha=.5
+    )
+    axtwinx.tick_params(axis='y', labelcolor="tab:orange")
+    axtwinx.set_ylabel('Error bound', color="tab:orange")
+    ax.set_xlabel("TMD from training dataset")
+    ax.set_xscale("symlog")
+    fig.suptitle(args.dataset)
+    if "_C2" in args.pe:
+        figname = os.path.join(
+            results_dir,
+            f"bound_{args.num_layers+1}.svg"
+        )
+    else:
+        figname = os.path.join(
+            results_dir,
+            f"bound_{args.num_layers+1}_{args.pe}.svg"
+        )
+    fig.savefig(
+        figname,
+        bbox_inches="tight"
+    )
+    plt.close(fig)
