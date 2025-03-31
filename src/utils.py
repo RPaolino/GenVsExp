@@ -1,4 +1,4 @@
-from homlib import Graph, hom
+#from homlib import Graph, hom
 from  torch_geometric.utils import is_undirected, to_networkx
 import networkx as nx
 import numpy as np

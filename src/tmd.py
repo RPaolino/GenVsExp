@@ -62,7 +62,13 @@ def TMD(g1, g2, w, L):
     Chuang et al., Tree Mover’s Distance: Bridging Graph Metrics and
     Stability of Graph Neural Networks, NeurIPS 2022
     '''
-
+    try:
+        g1.x = g1.original_x
+        g2.x = g2.original_x
+        g1.edge_index = g1.original_edge_index
+        g2.edge_index = g2.original_edge_index
+    except:
+        pass
     if isinstance(w, list):
         assert(len(w) == L-1)
     else:
@@ -192,7 +198,7 @@ def pairwise_TMD(
     in the train_dataset.
     """
     num_train_graphs = len(train_dataset)
-    parallel = Parallel(n_jobs=-1, backend="multiprocessing", verbose=1)
+    parallel = Parallel(n_jobs=28, backend="multiprocessing", verbose=1)
     dTMD = delayed(
         partial(TMD, L=depth, w=w)
     )

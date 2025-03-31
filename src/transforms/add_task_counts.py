@@ -1,5 +1,5 @@
 import networkx as nx
-from homlib import hom
+#from homlib import hom
 from torch_geometric.transforms import BaseTransform
 from torch_geometric.data import Data
 from torch_geometric.utils.convert import to_networkx

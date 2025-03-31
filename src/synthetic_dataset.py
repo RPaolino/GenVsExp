@@ -227,56 +227,56 @@ class SyntheticDataset(InMemoryDataset):
         if "tmd" not in task:
             filename = f"data/TMD_{100}_{pe}_{task}.pt"
             labels = median_labels(data_list)
-            if os.path.exists(filename):
-                print("Loading TMD")
-                pairwise_distances = torch.load(filename)
-            else:
-                pairwise_distances = pairwise_TMD(
-                    data_list[:100],
-                    depth=depth
-                )
-                torch.save(
-                    pairwise_distances,
-                    filename
-                )
-            mds = MDS(n_components=2, dissimilarity='precomputed', random_state=42)
-            embeddings = mds.fit_transform(pairwise_distances)
+            # if os.path.exists(filename):
+            #     print("Loading TMD")
+            #     pairwise_distances = torch.load(filename)
+            # else:
+            #     pairwise_distances = pairwise_TMD(
+            #         data_list[:100],
+            #         depth=depth
+            #     )
+            #     torch.save(
+            #         pairwise_distances,
+            #         filename
+            #     )
+            # mds = MDS(n_components=2, dissimilarity='precomputed', random_state=42)
+            # embeddings = mds.fit_transform(pairwise_distances)
             
-            np.savetxt(
-                filename.replace("TMD_", "embeddings_").replace(".pt", ".txt"),
-                np.concatenate(
-                    [embeddings, np.array(labels[:100]).reshape(-1, 1)],
-                    axis=1
-                )
-            )
-            cluster_0 = [idx for idx, l in enumerate(labels[:100]) if l==0]
-            cluster_1 = [idx for idx, l in enumerate(labels[:100]) if l==1]
-            fig, ax = plt.subplots()
-            ax.scatter(
-                embeddings[cluster_0, 0], 
-                embeddings[cluster_0, 1], 
-                c=["red" for _ in range(len(cluster_0))], 
-                s=10, 
-                alpha=.5,
-                label=0
-            )
-            ax.scatter(
-                embeddings[cluster_1, 0], 
-                embeddings[cluster_1, 1], 
-                c=["blue" for _ in range(len(cluster_1))], 
-                s=10, 
-                alpha=.5,
-                marker="D",
-                label=1
-            )
-            ax.legend(title="Label")
-            ax.set_xticks([])
-            ax.set_yticks([])
-            fig.savefig(
-                filename.replace(".pt", ".svg").replace("data/", "imgs/"), 
-                bbox_inches="tight"
-            )
-            plt.close(fig)
+            # np.savetxt(
+            #     filename.replace("TMD_", "embeddings_").replace(".pt", ".txt"),
+            #     np.concatenate(
+            #         [embeddings, np.array(labels[:100]).reshape(-1, 1)],
+            #         axis=1
+            #     )
+            # )
+            # cluster_0 = [idx for idx, l in enumerate(labels[:100]) if l==0]
+            # cluster_1 = [idx for idx, l in enumerate(labels[:100]) if l==1]
+            # fig, ax = plt.subplots()
+            # ax.scatter(
+            #     embeddings[cluster_0, 0], 
+            #     embeddings[cluster_0, 1], 
+            #     c=["red" for _ in range(len(cluster_0))], 
+            #     s=10, 
+            #     alpha=.5,
+            #     label=0
+            # )
+            # ax.scatter(
+            #     embeddings[cluster_1, 0], 
+            #     embeddings[cluster_1, 1], 
+            #     c=["blue" for _ in range(len(cluster_1))], 
+            #     s=10, 
+            #     alpha=.5,
+            #     marker="D",
+            #     label=1
+            # )
+            # ax.legend(title="Label")
+            # ax.set_xticks([])
+            # ax.set_yticks([])
+            # fig.savefig(
+            #     filename.replace(".pt", ".svg").replace("data/", "imgs/"), 
+            #     bbox_inches="tight"
+            # )
+            # plt.close(fig)
         else:
             filename = f"data/TMD_{num_graphs}_{pe}_{task}.pt"
             if os.path.exists(filename):

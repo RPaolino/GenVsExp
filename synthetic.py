@@ -29,6 +29,7 @@ from src.transforms import (
     AddLabel,
     AddSubgraph
 )
+from src.tmd import pairwise_TMD 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -302,6 +303,24 @@ def main(config = None):
         test_size=0.1, 
         random_state=42
     ) 
+    print(len(skf_dataset), len(test_dataset))
+    print(skf_dataset[0])
+    filename = os.path.join(
+            results_dir,
+            f"{args.task}_train_test_{args.num_layers+1}_{args.pe}.pt"
+    )
+    tmd_matrix = pairwise_TMD(
+            skf_dataset,
+            test_dataset,
+            depth=args.num_layers+1
+    )
+    torch.save(
+        tmd_matrix,
+        filename
+    )
+    print("Max: ", tmd_matrix.min(0).values.max())
+    print("Test TMDs: ", tmd_matrix.min(0).values)
+    exit()
     test_loader = DataLoader(
         test_dataset, 
         batch_size=args.bs, 
