@@ -683,37 +683,37 @@ if __name__=="__main__":
         distance_values,
         mean_subset_acc,
         marker="o",
-        color="tab:blue",
+        color="tab:orange",
         label="Empirical Generalization Error"
     )
     ax.fill_between(
         distance_values,
         mean_subset_acc - std_subset_acc,
         mean_subset_acc + std_subset_acc,
-        color="tab:blue",
+        color="tab:orange",
         alpha=.5
     )
-    ax.tick_params(axis='y', labelcolor="tab:blue")
-    ax.set_ylabel('Empirical generalization error', color="tab:blue")
+    ax.tick_params(axis='y', labelcolor="tab:orange")
+    ax.set_ylabel('Empirical generalization error', color="tab:orange")
     axtwinx.plot(
         distance_values,
         mean_subset_err,
         marker="o",
-        color="tab:orange",
+        color="black",
         label="Error Bound"
     )
     axtwinx.fill_between(
         distance_values,
         (mean_subset_err - std_subset_err),
         (mean_subset_err + std_subset_err),
-        color="tab:orange",
+        color="black",
         alpha=.5
     )
-    axtwinx.tick_params(axis='y', labelcolor="tab:orange")
-    axtwinx.set_ylabel('Error bound', color="tab:orange")
-    ax.set_xlabel("TMD from training dataset")
+    axtwinx.tick_params(axis='y', labelcolor="black")
+    axtwinx.set_ylabel('Error bound', color="black")
+    ax.set_xlabel("TMD to training dataset")
     ax.set_xscale("symlog")
-    fig.suptitle(args.dataset)
+    ax.set_title(args.dataset)
     if "_C2" in args.pe:
         figname = os.path.join(
             results_dir,

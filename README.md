@@ -42,12 +42,14 @@ We employ some molecular dataset from ``TUDataset`` and plot the performance w.r
 ```bash
 python real.py --dataset Mutagenicity --num_layers 3
 ```
-<center>
-<img src="imgs/Mutagenicity.svg" style="width: 300">
-<img src="imgs/PROTEINS.svg" style="width: 300">
-<img src="imgs/BZR.svg" style="width: 300">
-<img src="imgs/COX2.svg" style="width: 300">
-<img src="imgs/AIDS.svg" style="width: 300">
-<img src="imgs/NCI109.svg" style="width: 300">
-</center>
-As reported, performance deteriorates as the testing samples get further form the training dataset.
+
+| Performance | Error bound |
+|:-------------------------:|:-------------------------:|
+|<img src="imgs/Mutagenicity.svg"  height="200">| <img src="imgs/Mutagenicity_bound_4.svg"  height="200">|
+| <img src="imgs/PROTEINS.svg" height="200"> | <img src="imgs/PROTEINS_bound_4.svg" height="200">  |
+| <img src="imgs/BZR.svg" height="200"> | <img src="imgs/BZR_bound_4.svg" height="200">  |
+| <img src="imgs/COX2.svg" height="200"> |  <img src="imgs/COX2_bound_4.svg" height="200"> |
+| <img src="imgs/AIDS.svg" height="200"> |  <img src="imgs/AIDS_bound_4.svg" height="200">  |
+| <img src="imgs/NCI109.svg" height="200"> |  <img src="imgs/NCI109_bound_4.svg" height="200"> |
+
+As reported, performance deteriorates as the testing samples get further from the training dataset. The effect is less pronounced in PROTEINS: for this dataset, methods that neglect the graph structure outperform graph-based approaches; hence, the graph structure is not crucial for the classification task.
