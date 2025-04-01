@@ -592,6 +592,7 @@ if __name__=="__main__":
             # Specialized error bound for that subset by plugging in xi_zeta = threshold_q
             err_bound_sub = bound_on_test_error(upper)
             subset_err_bound[n, fold] = err_bound_sub
+            subset_max_tmd[n, fold] = upper
 
         fig, ax = plt.subplots()
         mean = tmd_metrics[:, :fold+1].mean(1)

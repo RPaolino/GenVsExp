@@ -317,7 +317,7 @@ class SyntheticDataset(InMemoryDataset):
                 
         new_transforms = Compose([
             AddLabel(labels=labels),
-            AddSubgraph()
+            #AddSubgraph()
         ])
         for data in tqdm.tqdm(data_list, desc="Adding Synthetic Labels"):
             self._data_list.append(

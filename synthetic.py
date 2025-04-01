@@ -7,9 +7,11 @@ import numpy as np
 import os
 from sklearn.model_selection import StratifiedKFold, train_test_split, KFold
 import torch
-from torch.utils.data import DataLoader, TensorDataset
-from torch_geometric.data import Data, DataLoader
+from torch.utils.data import DataLoader
+#from torch.utils.data import DataLoader, TensorDataset
+#from torch_geometric.data import Data, DataLoader
 from torch_geometric.transforms import Constant, Compose
+from torch_geometric.utils import to_dense_adj
 import tqdm
 from datetime import datetime
 import wandb
@@ -33,9 +35,94 @@ from src.tmd import pairwise_TMD
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+
+
+def collate_dense_gnn(samples):
+    """
+    If model_name == "3-GNN", produce dense adjacency + node features in a 4D tensor [B, 1+in_dim, maxN, maxN].
+    Otherwise, return the raw PyG Data objects as a list (the usual approach).
+    """
+    # We want to combine multiple graphs into one batch.
+    # 1) Figure out the max number of nodes so we can pad all adjacency to the same size:
+    max_nodes = max(s.num_nodes for s in samples)
+    in_dim = samples[0].x.shape[1]
+    
+    # 2) Build a list of 3-WL adjacency “tensors” for each sample, plus their label
+    batch_3wls = []
+    labels = []
+    for g in samples:
+        # adjacency in shape [1, n, n]
+        adj = to_dense_adj(g.edge_index, max_num_nodes=g.num_nodes)
+        n = g.num_nodes
+
+        # Build a zero-init tensor [ (1 + in_dim) x max_nodes x max_nodes ]
+        #  - channel 0: adjacency
+        #  - channels 1..(1+in_dim): node features on the diagonal
+        # Then we place it in a bigger [max_nodes x max_nodes] if needed
+        # due to variable graph sizes in the batch.
+        z = torch.zeros((1 + in_dim, max_nodes, max_nodes), dtype=torch.float)
+        # Fill adjacency into z[0, :n, :n]
+        z[0, :n, :n] = adj[0]
+
+        # Put node features on the diagonal of each node
+        for node_idx, node_feat in enumerate(g.x):
+            z[1:, node_idx, node_idx] = node_feat
+
+        batch_3wls.append(z)
+        labels.append(g.y)
+
+    # 3) Stack along dim=0 to produce a batch shape [B, (1+in_dim), max_nodes, max_nodes]
+    x_3wlg = torch.stack(batch_3wls, dim=0)
+    y = torch.stack(labels, dim=0)
+    return (x_3wlg, y)
+
+# def collate_dense_gnn(samples):
+#     # The input samples is a list of pairs (graph, label).
+#     graphs = []
+#     labels = []
+#     for sample in samples:
+#         graphs.append(sample)
+#         labels.append(sample.y)
+#     #graphs, labels = map(list, zip(*samples))
+#     #labels = torch.tensor(np.array(labels))
+#     #tab_sizes_n = [ graphs[i].number_of_nodes() for i in range(len(graphs))]
+#     #tab_snorm_n = [ torch.FloatTensor(size,1).fill_(1./float(size)) for size in tab_sizes_n ]
+#     #snorm_n = tab_snorm_n[0][0].sqrt()  
+    
+#     #batched_graph = dgl.batch(graphs)
+
+#     g = graphs[0]
+#     adj = to_dense_adj(g.edge_index)
+#     """
+#         Adapted from https://github.com/leichen2018/Ring-GNN/
+#         Assigning node and edge feats::
+#         we have the adjacency matrix in R^{n x n}, the node features in R^{d_n} and edge features R^{d_e}.
+#         Then we build a zero-initialized tensor, say T, in R^{(1 + d_n + d_e) x n x n}. T[0, :, :] is the adjacency matrix.
+#         The diagonal T[1:1+d_n, i, i], i = 0 to n-1, store the node feature of node i. 
+#         The off diagonal T[1+d_n:, i, j] store edge features of edge(i, j).
+#     """
+
+#     zero_adj = torch.zeros_like(adj)
+    
+#     in_dim = g.x.shape[1]
+    
+#     # use node feats to prepare adj
+#     adj_node_feat = torch.stack([zero_adj for j in range(in_dim)])
+#     adj_node_feat = torch.cat([adj.unsqueeze(0), adj_node_feat], dim=0)
+    
+#     for node, node_feat in enumerate(g.x):
+#         adj_node_feat[1:, node, node] = node_feat
+
+#     x_node_feat = adj_node_feat.unsqueeze(0)
+    
+#     return x_node_feat, labels
+
 def compute_loss(args, data, model, criterion):
-    data, target = data.to(device), data.y.to(device)
-    output = model(data)
+    x_3wlg, target = data
+    x_3wlg = x_3wlg.to(device)
+    target = target.to(device)
+    output = model(x_3wlg)  
+    # Now compute your loss
     if len(output.shape) != len(target.shape):
         output = torch.squeeze(output, dim=1)
     loss = criterion(output, target)
@@ -66,13 +153,14 @@ def train(args, model, loader, criterion, optimizer, scheduler):
     model.train()
     total_loss = 0
     storage = None
-    for data in loader:
+    for batch in loader:
         optimizer.zero_grad()
-        loss, output = compute_loss(args, data, model, criterion)
+        loss, output = compute_loss(args, batch, model, criterion)
         loss.backward()
         optimizer.step()
         total_loss += loss.item()
-        storage = compute_metric_batch(args, output, data.y, storage)
+        target = batch[1].to(device) if args.model == "3-GNN" else torch.cat([d.y for d in batch], dim=0).to(device)
+        storage = compute_metric_batch(args, output, target, storage)
     if scheduler is not None:
         scheduler.step()
     return total_loss / len(loader), storage / len(loader.dataset)
@@ -82,10 +170,11 @@ def evaluate(args, model, loader, criterion):
     total_loss = 0
     storage = None
     with torch.no_grad():
-        for data in loader:
-            loss, output = compute_loss(args, data, model, criterion)
+        for batch in loader:
+            loss, output = compute_loss(args, batch, model, criterion)
             total_loss += loss.item()
-            storage = compute_metric_batch(args, output, data.y, storage)
+            target = batch[1].to(device) if args.model == "3-GNN" else torch.cat([d.y for d in batch], dim=0).to(device)
+            storage = compute_metric_batch(args, output, target, storage)
     return total_loss / len(loader), storage / len(loader.dataset)
 
 def get_mlp(num_layers, in_dim, out_dim, hidden_dim, activation, dropout_rate):
@@ -303,28 +392,29 @@ def main(config = None):
         test_size=0.1, 
         random_state=42
     ) 
-    print(len(skf_dataset), len(test_dataset))
-    print(skf_dataset[0])
-    filename = os.path.join(
-            results_dir,
-            f"{args.task}_train_test_{args.num_layers+1}_{args.pe}.pt"
-    )
-    tmd_matrix = pairwise_TMD(
-            skf_dataset,
-            test_dataset,
-            depth=args.num_layers+1
-    )
-    torch.save(
-        tmd_matrix,
-        filename
-    )
-    print("Max: ", tmd_matrix.min(0).values.max())
-    print("Test TMDs: ", tmd_matrix.min(0).values)
-    exit()
+    # print(len(skf_dataset), len(test_dataset))
+    # print(skf_dataset[0])
+    # filename = os.path.join(
+    #         results_dir,
+    #         f"{args.task}_train_test_{args.num_layers+1}_{args.pe}.pt"
+    # )
+    # tmd_matrix = pairwise_TMD(
+    #         skf_dataset,
+    #         test_dataset,
+    #         depth=args.num_layers+1
+    # )
+    # torch.save(
+    #     tmd_matrix,
+    #     filename
+    # )
+    # print("Max: ", tmd_matrix.min(0).values.max())
+    # print("Test TMDs: ", tmd_matrix.min(0).values)
+    # exit()
     test_loader = DataLoader(
         test_dataset, 
         batch_size=args.bs, 
-        shuffle=False
+        shuffle=False,
+        collate_fn=collate_dense_gnn
     )
     # Dataset split
     skf = StratifiedKFold(n_splits=10)
@@ -332,12 +422,14 @@ def main(config = None):
         train_loader = DataLoader(
             [skf_dataset[idx] for idx in train_idx], 
             batch_size=args.bs, 
-            shuffle=True
+            shuffle=True,
+            collate_fn=collate_dense_gnn
         )
         val_loader = DataLoader(
             [skf_dataset[idx] for idx in val_idx], 
             batch_size=args.bs, 
-            shuffle=False
+            shuffle=False,
+            collate_fn=collate_dense_gnn
         )
         dataset_name = args.dataset.lower()
         # Build model
@@ -351,10 +443,11 @@ def main(config = None):
             num_layers=args.num_layers, 
             max_distance=args.max_distance,
             task="g",
-            x_encoder=x_encoder,
+            x_encoder=dataset._data.x.shape[1],#x_encoder
             edge_attr_encoder=edge_attr_encoder,
             output_channels=1,
-            pool=args.pool
+            pool=args.pool,
+            device=device
         ).to(device)
 
         if ("sum_sub_C" in args.task 
