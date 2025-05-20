@@ -1,19 +1,36 @@
 cff-version: 1.2.0
-message: "If you use this work, please cite it as below."
+message: "If you use this software, please cite it as below."
 title: "Graph Representational Learning: When Does More Expressivity Hurt Generalization?"
-authors:
-  - family-names: Maskey
-    given-names: Sohir
-  - family-names: Paolino
-    given-names: Raffaele
-  - family-names: Jogl
-    given-names: Fabian
-  - family-names: Kutyniok
-    given-names: Gitta
-  - family-names: Lutzeyer
-    given-names: Johannes F.
+version: 1.0.0
 date-released: 2025-05-20
-doi: 10.48550/arXiv.2505.11298
-url: https://arxiv.org/abs/2505.11298
-type: article
-repository-code: https://github.com/RPaolino/GenVsExp/
+url: "https://github.com/RPaolino/GenVsExp"
+authors:
+  - family-names: "Maskey"
+    given-names: "Sohir"
+  - family-names: "Paolino"
+    given-names: "Raffaele"
+  - family-names: "Jogl"
+    given-names: "Fabian"
+  - family-names: "Kutyniok"
+    given-names: "Gitta"
+  - family-names: "Lutzeyer"
+    given-names: "Johannes F."
+
+preferred-citation:
+  type: article
+  title: "Graph Representational Learning: When Does More Expressivity Hurt Generalization?"
+  authors:
+    - family-names: "Maskey"
+      given-names: "Sohir"
+    - family-names: "Paolino"
+      given-names: "Raffaele"
+    - family-names: "Jogl"
+      given-names: "Fabian"
+    - family-names: "Kutyniok"
+      given-names: "Gitta"
+    - family-names: "Lutzeyer"
+      given-names: "Johannes F."
+  year: 2025
+  doi: "10.48550/arXiv.2505.11298"
+  url: "https://arxiv.org/abs/2505.11298"
+  archive: "arXiv"
