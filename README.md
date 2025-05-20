@@ -1,4 +1,5 @@
-# When Does More Expressivity Hurt Generalization?
+# Graph representational learning: When Does More Expressivity Hurt Generalization? <br>[![arXiv](https://img.shields.io/badge/arXiv-2305.13084-aa142d.svg?logo=arxiv&style=plastic)](https://arxiv.org/abs/2505.11298)
+
 ---
 - [Experiments](#experiments)
     - [Median-Based Labeling with Cycle Counts](#median-based-labeling-with-cycle-counts)
@@ -53,3 +54,21 @@ python real.py --dataset Mutagenicity --num_layers 3
 | <img src="imgs/NCI109.svg" height="300"> |  <img src="imgs/NCI109_bound_4.svg" height="300"> |
 
 As reported, performance deteriorates as the testing samples get further from the training dataset. The effect is less pronounced in PROTEINS: for this dataset, methods that neglect the graph structure outperform graph-based approaches; hence, the graph structure is not crucial for the classification task.
+
+---
+
+## Citation
+
+If you found our work useful in your research, please cite our paper: 
+```bibtex 
+    @misc{maskey2025graphrepresentationallearningdoes,
+    title = {Graph Representational Learning: When Does More Expressivity Hurt Generalization?},
+    author = {Sohir Maskey and Raffaele Paolino and Fabian Jogl and Gitta Kutyniok and Johannes F. Lutzeyer},
+    year = {2025},
+    eprint = {2505.11298},
+    archivePrefix = {arXiv},
+    primaryClass = {cs.LG},
+    url = {https://arxiv.org/abs/2505.11298}
+} 
+``` 
+
